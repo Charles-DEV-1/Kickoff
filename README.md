@@ -436,7 +436,7 @@ Add contract/security checks appropriate to the existing CI. Compare the final r
 
 The repository had no existing CI workflow, so `.github/workflows/ci.yml` now runs Python compilation and the full test suite on pushes, pull requests, and manual runs. The detailed handoffs are [the frontend integration guide](docs/frontend-integration.md) and [the deployment handoff](docs/deployment.md).
 
-Local deployment inspection found `api/index.py` as the Vercel entry point and a configured local Supabase environment, but there is no `.vercel/project.json` link and this Kickoff folder is not a Git checkout. The selected Vercel project, deployed environment values, production API/frontend domains, and live Supabase RLS/RPC state therefore remain unverified. No deployment or live secret was changed. The provided GitHub remote could not be accessed with credentials available to this folder, so the changes are local and were not pushed.
+Local deployment inspection found `api/index.py` as the Vercel entry point and a configured local Supabase environment, but there is no `.vercel/project.json` link. The Stage 9 work was pushed to `origin/main` at commit `e114e5d` after the user initialized the Git checkout. The selected Vercel project, deployed environment values, production API/frontend domains, and live Supabase RLS/RPC state remain unverified. No deployment or live secret was changed.
 
 ## Stage 10 — MVP acceptance review and teaching handoff
 
@@ -448,15 +448,56 @@ Review the implementation against the FRD’s online MVP acceptance criteria and
 Do not claim deployment/live behavior unless it was actually verified. Update this README’s API catalog based on the code and OpenAPI file. Provide a final learner-friendly walkthrough from frontend request to Flask route, service, repository/database transaction, and JSON response. Explain the key security boundaries and list any remaining product, hosting, legal, or secret-configuration decisions.
 ~~~
 
+### Stage 10 review result
+
+The review used the supplied file `Kickoff Backend FRD v0.2.pdf` (its cover identifies it as draft v0.3), this README, the Flask route map, the OpenAPI contract, SQL migrations, and the local tests. The FRD describes offline action replay as part of its MVP, while the team's explicit product direction for this build is online-only. That scope decision is retained: this backend has no offline action queue, replay/batch endpoint, provisional client reward, client-generated task IDs, or late-event reconciliation. `queue.Queue` in `app/modules/ai/service.py` only bounds a timed provider call; it is not an offline action queue.
+
+#### Acceptance paths checked
+
+| Area | Review result and evidence |
+|---|---|
+| Signup/signin and authorization | Signup, sign-in, Google OAuth, email verification, and password reset belong to the Supabase frontend client; Flask does not receive passwords or provide signup routes. `require_auth` verifies the configured Supabase JWT signature and claims, checks the live Auth user/session, derives the owner from `sub`, and calls `ensure_user_profile` so the first valid request creates the profile/reward state. Local auth tests cover malformed, expired, revoked, deleted-account, and cross-user cases. Supabase provider/redirect/email configuration was not rechecked in this review. |
+| Empty home/bootstrap | `GET /v1/bootstrap` returns the authenticated profile, reward state, an empty task array for a new account, manifest, server time, and API version. `tests/test_tasks.py` checks the empty second user's bootstrap, private ETag behavior, a 50-task bound, gzip, delta pagination, tombstones, and expired-cursor refresh. |
+| Breakdown | `POST /v1/ai/breakdown` validates a suggestion request and does not create a task. It validates a template first, then may call the configured provider; provider/cache/allowance failures fall back to the template. Fake-provider tests cover valid, malformed, malicious, slow, and unavailable output plus sensitive-text redaction. A usable response depends on the provisional template migration being applied and active; absent template data returns `503 templates_unavailable`. Earlier user-run Stage 5/6 smoke outputs reported template and Groq success; this review did not make a live provider call. |
+| Task and step workflow | Task creation with initial steps is one RPC transaction; updates use versions; step reorder is atomic. Step start/complete/reopen call `act_on_my_step`, which updates state, append-only events, reward state, and the idempotency result in one transaction. Responses include `reward_delta`; local tests use a stateful fake Data API for boundaries, transitions, rollback/replay behavior, and scoping, so they do not execute the SQL functions or prove live RLS. Earlier user-run Stage 3/4 smoke outputs reported success. |
+| Online retry safety | Writes use a per-user idempotency reservation; task and reward RPCs store their successful response atomically with the business mutation. Same-key/same-body retries replay; changed-body reuse conflicts. Local tests cover replay and key reuse. Earlier user-run smoke outputs reported an idempotent replay. |
+| Export/deletion | Export and deletion routes are implemented and focused tests cover completeness, limits, confirmation, lockout, retries, and repeated purge behavior using fake adapters. The export includes data from the MVP schema. This review did not verify migration 009, live Auth deletion, or the deployed scheduled purge. |
+| Logs and secrets | Application request logs contain request ID, route, method, and status; error handlers omit exception text and request bodies. AI diagnostics use fixed reason codes. Tests assert task text, provider text, tokens, and secrets are absent from captured logs. `.env` is ignored; `.env.example` contains names/placeholders only. Production proxy/provider logging settings still need review. |
+
+#### FRD differences and decisions to close
+
+The OpenAPI file describes the code as implemented; these items are differences from the attached FRD or product decisions, not claims that the current API already supports them:
+
+- **Offline features:** intentionally deferred by the online-only scope above, despite the FRD's MVP offline acceptance criterion.
+- **Task filters:** this API supports exact `due_date`, status, `updated_since`, cursor, and limit. The FRD also describes `due_before` and `due_after`; those range filters are not implemented.
+- **Task cap error:** the implementation returns `409 task_limit_reached`; the FRD specifies `422`. Keep the OpenAPI aligned to the running code until the team chooses one contract.
+- **Reward tuning:** migration 004 seeds 1 start point and 10 completion points, with plant thresholds `[0, 25, 75, 150, 300]`. The FRD lists proposed examples of 2, 5, and a 10-point task-completion bonus. The current `task_completed` event is recorded with zero points and there is no configurable task-completion bonus. Product/specialist approval is needed before tuning these values; any applied change must be a forward migration.
+- **Status names:** the API/database use `pending`/`started`/`completed` for steps and `active`/`completed`/`archived` for tasks. The FRD uses `not_started`/`started`/`done` and task `done`. Frontend code should follow the published OpenAPI enums unless the team deliberately changes the contract.
+- **Retention and safety:** the default per-user AI cache TTL is 24 hours and idempotency records are retained for 24 hours, while the FRD proposes 30 days for both. The provider-output validator enforces shape, text length, minutes, and safe plain text, but does not yet apply a configurable blocked-word list from the FRD. Confirm retention periods and the content-safety list.
+- **Template coverage:** the requested provisional English generic seed is present. It is not the full set of reviewed subject templates described in the FRD and needs content review before student-facing launch.
+- **Operational checks:** the FRD calls for rate-limit limit/remaining/reset headers; current 429 responses include `Retry-After`, but not those three counters. The code bounds the AI provider budget, but the under-10-second end-to-end target and shared edge rate limiting need deployed verification.
+- **Sensitive account actions:** export and deletion require a valid session but do not enforce a recent sign-in challenge. The FRD marks recent-authentication behavior as an open decision; decide it before production.
+
+#### Remaining launch decisions and verification
+
+Approve the reward values/task bonus, final reviewed template copy, AI blocked terms and cache retention, Groq commercial/data-use terms and user notice/consent, and the recent-authentication rule for export/deletion. Confirm which rate-limit headers and task due filters the frontend needs. Confirm Supabase migrations 001–009 and RLS/RPC grants in the selected project. Link the actual Vercel project, set server-only secrets there, verify `ALLOWED_ORIGINS`, cron behavior and production health/readiness, then run authenticated staging smoke tests. The 30-day account retention/legal note remains the temporary statement already recorded above. No production deployment or secret change was performed during this review.
+
+Local verification for this review: `python -m pytest -q -p no:cacheprovider` passed **123 tests** on 2026-11-03. Most database-focused tests use a fake Data API and do not execute the SQL against Supabase. GitHub Actions status and production behavior are separate checks and were not inspected here.
+
 # Frontend-to-backend API: how the pieces fit together
 
 The backend is a separate HTTPS service. The frontend calls it with HTTP requests and JSON. The frontend does not connect directly to the backend’s PostgreSQL database.
 
-1. The frontend signs the user in with the Supabase client (email/password or Google).
-2. Supabase gives the frontend a short-lived access token.
-3. The frontend sends that access token in the Authorization header when calling a protected Flask API route. Flask verifies the token and forwards it to Supabase Data API with the project publishable key.
-4. Flask verifies the token, gets the user ID from its verified subject claim, and runs the requested operation. Supabase Postgres Row Level Security (RLS) uses the forwarded token to restrict rows to that user.
-5. Flask returns JSON. The frontend turns that response into the screen.
+1. **Sign in:** the frontend uses Supabase Auth (email/password or a configured OAuth provider). Supabase returns an access token. The backend never handles the password; there are no Flask signup/signin routes.
+2. **Call the API:** the frontend sends `Authorization: Bearer <access_token>` to the API origin. `api/index.py` is Vercel's Python entry point and imports the Flask app factory in `app/__init__.py`.
+3. **Check the identity:** protected routes use `require_auth` in `app/common/auth.py`. It verifies the JWT signature with the project's public JWKS keys, then validates issuer, audience, expiry, required claims, authenticated role, and live Supabase Auth/account status. It takes the user ID only from the verified token subject. `ensure_user_profile` safely creates a first-use profile and reward state.
+4. **Validate and scope:** the matching Flask blueprint parses the request and runs its schema validators. Rate-limit and idempotency middleware run before writes. Resource RPCs derive the owner from `auth.uid()` and Row Level Security (RLS) checks access again inside Postgres.
+5. **Run the operation:** `app/common/supabase_data.py` calls Supabase Auth or the Data API using the publishable key plus the verified end-user JWT. Multi-row actions use narrowly granted `SECURITY INVOKER` SQL RPCs so the changes happen in one transaction under the user's RLS policies.
+6. **Return a safe response:** Flask returns JSON with `X-Request-Id`. Personal data is private/no-store or private/revalidated; public template responses use short caching. Errors have a stable code and do not include stack traces, credentials, or request text.
+
+For example, `POST /v1/steps/{step_id}/complete` reaches the task blueprint, validates the current version, and claims the idempotency key. The `act_on_my_step` SQL function locks the caller's step/task, records server time, appends deduplicated reward events, updates reward state, and stores the successful response in the same transaction. Flask returns the updated step/task and `reward_delta`; a retry with the same key/body replays that result instead of awarding twice.
+
+For `POST /v1/ai/breakdown`, the AI route validates the title and request options, chooses a template, and asks the configured provider adapter for a response when allowed. The service removes email/phone patterns, validates provider output as untrusted text, and returns the template when AI is unavailable or rejected. This endpoint only suggests steps; the frontend creates a task separately.
 
 The frontend must never receive SUPABASE_SECRET_KEY, an LLM API key, or CRON_SECRET. Normal user data calls use the public SUPABASE_PUBLISHABLE_KEY together with the signed-in user access token.
 
@@ -544,7 +585,7 @@ This catalog is compared with the Flask route map and `openapi/openapi.yaml`. �
 | GET | /v1/me/export | Signed-in | ✅ Rate-limited private JSON attachment of data in the MVP schema. |
 | DELETE | /v1/me | Signed-in | ✅ Requires `{"confirm":"DELETE"}` and an idempotency key; locks access and queues 30-day deletion. |
 | GET | /v1/bootstrap | Signed-in | ✅ Initial online app data; supports private ETag/304 and gzip. |
-| GET | /v1/tasks | Signed-in | ✅ List tasks with status, due date, updated-since, cursor, and limit filters. |
+| GET | /v1/tasks | Signed-in | ✅ List tasks with status, exact `due_date`, `updated_since`, cursor, and limit filters; range filters `due_before`/`due_after` are not implemented. |
 | POST | /v1/tasks | Signed-in | ✅ Create a task and initial steps atomically. |
 | GET | /v1/tasks/{task_id} | Signed-in | ✅ Read one task and its active steps. |
 | PATCH | /v1/tasks/{task_id} | Signed-in | ✅ Update task fields with version check. |
