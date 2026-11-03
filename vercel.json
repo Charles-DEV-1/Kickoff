@@ -1,0 +1,13 @@
+{
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 60
+    }
+  },
+  "crons": [
+    {
+      "path": "/internal/jobs/purge",
+      "schedule": "0 3 * * *"
+    }
+  ]
+}

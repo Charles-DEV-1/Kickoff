@@ -1,0 +1,4111 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Kickoff Online MVP API",
+    "version": "1.0.0",
+    "description": "Contract for the implemented online-only MVP routes. Offline replay, routines, reminders, analytics, and other deferred product endpoints are not part of this contract."
+  },
+  "servers": [
+    {
+      "url": "https://{apiHost}",
+      "description": "Deployed API origin; set this to the selected deployment host.",
+      "variables": {
+        "apiHost": {
+          "default": "api.example.com",
+          "description": "Vercel deployment domain."
+        }
+      }
+    },
+    {
+      "url": "http://127.0.0.1:5000",
+      "description": "Local Flask development server."
+    }
+  ],
+  "tags": [
+    {
+      "name": "System"
+    },
+    {
+      "name": "Profile"
+    },
+    {
+      "name": "Tasks"
+    },
+    {
+      "name": "Step actions"
+    },
+    {
+      "name": "Templates"
+    },
+    {
+      "name": "AI breakdown"
+    },
+    {
+      "name": "Internal operations",
+      "description": "Server-to-server only. Never call from the frontend."
+    }
+  ],
+  "paths": {
+    "/v1/health": {
+      "get": {
+        "operationId": "health",
+        "summary": "Liveness",
+        "description": "Returns process liveness without checking Supabase.",
+        "tags": [
+          "System"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "API process is alive.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Request correlation ID (also returned on errors).",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/v1/health/ready": {
+      "get": {
+        "operationId": "readiness",
+        "summary": "Supabase Auth readiness",
+        "description": "Checks reachability of Supabase Auth. This is not a database/RPC readiness check.",
+        "tags": [
+          "System"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Supabase Auth is reachable.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Request correlation ID (also returned on errors).",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Readiness"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Supabase Auth is not reachable or configuration is missing.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Request correlation ID (also returned on errors).",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Readiness"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me": {
+      "get": {
+        "operationId": "getMe",
+        "summary": "Get my profile",
+        "tags": [
+          "Profile"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfNoneMatch"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Profile and settings.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Request correlation ID (also returned on errors).",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "ETag": {
+                "description": "Representation validator. Send it in If-None-Match on the next read.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+                  "Cache-Control": {
+                    "description": "Cache policy for this representation.",
+                    "schema": {
+                      "type": "string"
+                    }
+                  }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                },
+                "example": {
+                  "id": "11111111-1111-4111-8111-111111111111",
+                  "display_name": null,
+                  "language": "en",
+                  "timezone": "Africa/Lagos",
+                  "settings": {
+                    "calm_mode": true
+                  },
+                  "created_at": "2026-01-01T10:00:00Z",
+                  "updated_at": "2026-01-01T10:00:00Z"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Profile is unchanged.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Request correlation ID (also returned on errors).",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "ETag": {
+                "description": "Representation validator. Send it in If-None-Match on the next read.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "Cache policy for this representation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "patchMe",
+        "summary": "Merge profile/settings fields",
+        "description": "Updates only supplied fields. Settings are merged by key; unknown profile/settings keys return 422.",
+        "tags": [
+          "Profile"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfilePatch"
+              },
+              "example": {
+                "display_name": "Alex",
+                "settings": {
+                  "calm_mode": false
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated profile.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Request correlation ID (also returned on errors).",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Profile"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteMyAccount",
+        "summary": "Request account deletion",
+        "description": "Requires exact confirmation. Locks API/RLS access immediately, then queues Supabase Auth soft deletion and 30-day data purge.",
+        "tags": [
+          "Profile"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteAccountRequest"
+              },
+              "example": {
+                "confirm": "DELETE"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Deletion accepted; access is already locked.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Request correlation ID (also returned on errors).",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteAccountAccepted"
+                },
+                "example": {
+                  "status": "pending",
+                  "requested_at": "2026-01-01T10:00:00Z",
+                  "purge_after": "2026-01-31T10:00:00Z",
+                  "auth_deletion_status": "pending_retry"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v1/me/export": {
+      "get": {
+        "operationId": "exportMyData",
+        "summary": "Export my MVP data",
+        "description": "Returns a JSON attachment. Limited to three exports per user per 24 hours.",
+        "tags": [
+          "Profile"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Private JSON data export.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Request correlation ID (also returned on errors).",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "Content-Disposition": {
+                "description": "Fixed safe download filename.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "Always private and non-cacheable.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataExport"
+                },
+                "example": {
+                  "export_version": 1,
+                  "exported_at": "2026-01-01T10:00:00Z",
+                  "account": {
+                    "id": "11111111-1111-4111-8111-111111111111",
+                    "email": "user@example.test"
+                  },
+                  "profile": {
+                    "id": "11111111-1111-4111-8111-111111111111",
+                    "display_name": null,
+                    "language": "en",
+                    "timezone": "Africa/Lagos",
+                    "settings": {},
+                    "created_at": "2026-01-01T10:00:00Z",
+                    "updated_at": "2026-01-01T10:00:00Z"
+                  },
+                  "consents": [],
+                  "tasks": [],
+                  "steps": [],
+                  "reward_events": [],
+                  "reward_state": {
+                    "points_total": 0,
+                    "plant_stage": 0,
+                    "current_streak": 0,
+                    "best_streak": 0,
+                    "freezes_held": 0,
+                    "streak_status": "none",
+                    "last_active_local_date": null
+                  },
+                  "ai_breakdowns": [],
+                  "ai_usage": []
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v1/bootstrap": {
+      "get": {
+        "operationId": "getBootstrap",
+        "summary": "Get initial online app data",
+        "description": "Returns profile, reward state, at most 50 active tasks, active task count, template manifest, server time, and API version.",
+        "tags": [
+          "Tasks"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfNoneMatch"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Private bootstrap snapshot.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Request correlation ID (also returned on errors).",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "ETag": {
+                "description": "Representation validator. Send it in If-None-Match on the next read.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "Cache policy for this representation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Bootstrap"
+                },
+                "example": {
+                  "profile": {
+                    "id": "11111111-1111-4111-8111-111111111111",
+                    "display_name": null,
+                    "language": "en",
+                    "timezone": "Africa/Lagos",
+                    "settings": {},
+                    "created_at": "2026-01-01T10:00:00Z",
+                    "updated_at": "2026-01-01T10:00:00Z"
+                  },
+                  "reward_state": {
+                    "points_total": 0,
+                    "plant_stage": 0,
+                    "current_streak": 0,
+                    "best_streak": 0,
+                    "freezes_held": 0,
+                    "streak_status": "none",
+                    "last_active_local_date": null,
+                    "updated_at": "2026-01-01T10:00:00Z"
+                  },
+                  "tasks": [],
+                  "active_task_count": 0,
+                  "template_manifest": {
+                    "items": []
+                  },
+                  "server_time": "2026-01-01T10:00:00Z",
+                  "api_version": "v1"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Bootstrap is unchanged.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Request correlation ID (also returned on errors).",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "ETag": {
+                "description": "Representation validator. Send it in If-None-Match on the next read.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "Cache policy for this representation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v1/tasks": {
+      "get": {
+        "operationId": "listTasks",
+        "summary": "List or delta-read tasks",
+        "description": "Normal mode returns active/completed/archived resources. Supplying updated_since selects delta mode and includes soft-delete tombstones. Follow next_cursor within a stable snapshot before advancing next_since.",
+        "tags": [
+          "Tasks"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Task status filter.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "active",
+                "completed",
+                "archived",
+                "all"
+              ],
+              "default": "active"
+            }
+          },
+          {
+            "name": "due_date",
+            "in": "query",
+            "required": false,
+            "description": "Exact UTC calendar date (YYYY-MM-DD).",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "updated_since",
+            "in": "query",
+            "required": false,
+            "description": "Timezone-qualified ISO 8601 server cursor; older than 30 days returns full_refresh_required.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "snapshot_at",
+            "in": "query",
+            "required": false,
+            "description": "Server-issued snapshot cursor for subsequent delta pages; requires updated_since.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Opaque cursor returned by the previous page.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Page size, 1–50; default 20.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IfNoneMatch"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Private task page or delta page.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Request correlation ID (also returned on errors).",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "ETag": {
+                "description": "Representation validator. Send it in If-None-Match on the next read.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "Cache policy for this representation.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Server-Time": {
+                "description": "Server-generated time for delta responses.",
+                "schema": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              },
+              "X-Snapshot-At": {
+                "description": "Stable snapshot time for this page set.",
+                "schema": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              },
+              "X-Next-Since": {
+                "description": "Server-generated cursor for the next delta window.",
+                "schema": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskListOrDelta"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Task page is unchanged.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Request correlation ID (also returned on errors).",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "ETag": {
+                "description": "Representation validator. Send it in If-None-Match on the next read.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "Cache policy for this representation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createTask",
+        "summary": "Create task and initial steps",
+        "description": "Atomic create. Up to 30 steps; server generates UUIDs. Requires an idempotency key.",
+        "tags": [
+          "Tasks"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskCreateRequest"
+              },
+              "example": {
+                "title": "Prepare a project demo",
+                "notes": "",
+                "source": "manual",
+                "steps": [
+                  {
+                    "text": "Review the project brief",
+                    "planned_minutes": 15
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Task created with its steps.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Request correlation ID (also returned on errors).",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Task"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v1/tasks/{task_id}": {
+      "parameters": [
+        {
+          "name": "task_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getTask",
+        "summary": "Get one task",
+        "tags": [
+          "Tasks"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfNoneMatch"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Task and active steps.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Request correlation ID (also returned on errors).",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "ETag": {
+                "description": "Representation validator. Send it in If-None-Match on the next read.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "Cache policy for this representation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Task"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Task is unchanged.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Request correlation ID (also returned on errors).",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "ETag": {
+                "description": "Representation validator. Send it in If-None-Match on the next read.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "Cache policy for this representation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "patchTask",
+        "summary": "Update task fields",
+        "description": "Requires the current task version; stale versions return 409 with a safe current resource.",
+        "tags": [
+          "Tasks"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskPatchRequest"
+              },
+              "example": {
+                "version": 1,
+                "title": "Prepare the project demo"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated task.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Request correlation ID (also returned on errors).",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Task"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteTask",
+        "summary": "Soft-delete a task",
+        "description": "Requires the current task version. The task and steps remain as tombstones during retention.",
+        "tags": [
+          "Tasks"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionRequest"
+              },
+              "example": {
+                "version": 1
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Task soft-deleted.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Request correlation ID (also returned on errors).",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletedResource"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v1/tasks/{task_id}/steps": {
+      "parameters": [
+        {
+          "name": "task_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "createStep",
+        "summary": "Add a step",
+        "description": "Appends a step to the task; maximum 30 active steps.",
+        "tags": [
+          "Tasks"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StepCreateRequest"
+              },
+              "example": {
+                "text": "Review the project brief",
+                "planned_minutes": 15
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created step.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Request correlation ID (also returned on errors).",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StepMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v1/steps/{step_id}": {
+      "parameters": [
+        {
+          "name": "step_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "patch": {
+        "operationId": "patchStep",
+        "summary": "Edit step",
+        "description": "Requires the current step version.",
+        "tags": [
+          "Tasks"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StepPatchRequest"
+              },
+              "example": {
+                "version": 1,
+                "text": "Review the project brief"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated step.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Request correlation ID (also returned on errors).",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StepMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteStep",
+        "summary": "Soft-delete step",
+        "description": "Requires the current step version.",
+        "tags": [
+          "Tasks"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VersionRequest"
+              },
+              "example": {
+                "version": 1
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Step soft-deleted.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Request correlation ID (also returned on errors).",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeletedResource"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v1/tasks/{task_id}/steps/order": {
+      "parameters": [
+        {
+          "name": "task_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "put": {
+        "operationId": "reorderSteps",
+        "summary": "Atomically reorder steps",
+        "description": "The complete list of active step IDs must be present exactly once. Uses the task version.",
+        "tags": [
+          "Tasks"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReorderStepsRequest"
+              },
+              "example": {
+                "version": 3,
+                "step_ids": [
+                  "22222222-2222-4222-8222-222222222222",
+                  "33333333-3333-4333-8333-333333333333"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Task with reordered steps.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Request correlation ID (also returned on errors).",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Task"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v1/steps/{step_id}/start": {
+      "parameters": [
+        {
+          "name": "step_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "startStep",
+        "summary": "Start a step",
+        "tags": [
+          "Step actions"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StepActionRequest"
+              },
+              "example": {
+                "version": 1
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated step, task state, and reward snapshot.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Request correlation ID (also returned on errors).",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StepActionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v1/steps/{step_id}/complete": {
+      "parameters": [
+        {
+          "name": "step_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "completeStep",
+        "summary": "Complete a step",
+        "description": "The server records action time. actual_minutes is optional (0–600). Completing a never-started step also records its start time.",
+        "tags": [
+          "Step actions"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteStepRequest"
+              },
+              "example": {
+                "version": 2,
+                "actual_minutes": 18
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated step and reward_delta in one response.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Request correlation ID (also returned on errors).",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StepActionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v1/steps/{step_id}/reopen": {
+      "parameters": [
+        {
+          "name": "step_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "reopenStep",
+        "summary": "Reopen a step",
+        "description": "Reopening does not remove previously awarded points.",
+        "tags": [
+          "Step actions"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StepActionRequest"
+              },
+              "example": {
+                "version": 3
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated step and reward_delta.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Request correlation ID (also returned on errors).",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StepActionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/v1/ai/breakdown": {
+      "post": {
+        "operationId": "suggestTaskBreakdown",
+        "summary": "Suggest steps for a task",
+        "description": "Returns template-backed or AI-generated suggestions; does not create a task. AI fallback is always available when a reviewed template exists.",
+        "tags": [
+          "AI breakdown"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BreakdownRequest"
+              },
+              "example": {
+                "title": "Prepare a project demo",
+                "description": "Present the main project outcome.",
+                "language": "en",
+                "detail_level": 2,
+                "task_type": "presentation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Validated task-step suggestions.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Request correlation ID (also returned on errors).",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "Cache-Control": {
+                "description": "Private, non-cacheable response.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BreakdownResponse"
+                },
+                "example": {
+                  "steps": [
+                    {
+                      "text": "Review the project brief",
+                      "planned_minutes": 10
+                    },
+                    {
+                      "text": "Outline the main points",
+                      "planned_minutes": 20
+                    },
+                    {
+                      "text": "Prepare a concise demo",
+                      "planned_minutes": 25
+                    },
+                    {
+                      "text": "Rehearse once",
+                      "planned_minutes": 15
+                    },
+                    {
+                      "text": "Check the demo environment",
+                      "planned_minutes": 10
+                    }
+                  ],
+                  "source": "template",
+                  "template_id": "44444444-4444-4444-8444-444444444444",
+                  "notice": null,
+                  "prompt_version": "kickoff-breakdown-v1",
+                  "usage": {
+                    "used": 0,
+                    "limit": 10
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/TemplatesUnavailable"
+          }
+        }
+      }
+    },
+    "/v1/templates/manifest": {
+      "get": {
+        "operationId": "getTemplateManifest",
+        "summary": "List active template IDs and versions",
+        "tags": [
+          "Templates"
+        ],
+        "security": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfNoneMatch"
+          },
+          {
+            "name": "language",
+            "in": "query",
+            "required": false,
+            "description": "Optional supported language.",
+            "schema": {
+              "type": "string",
+              "default": "en"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Public, short-cache template manifest.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Request correlation ID (also returned on errors).",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "ETag": {
+                "description": "Representation validator. Send it in If-None-Match on the next read.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "Public short-lived cache policy.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateManifest"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Manifest has not changed.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Request correlation ID (also returned on errors).",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "ETag": {
+                "description": "Representation validator. Send it in If-None-Match on the next read.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "Cache policy for this representation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/TemplatesUnavailable"
+          }
+        }
+      }
+    },
+    "/v1/templates": {
+      "get": {
+        "operationId": "listTemplates",
+        "summary": "List active templates",
+        "tags": [
+          "Templates"
+        ],
+        "security": [],
+        "parameters": [
+          {
+            "name": "task_type",
+            "in": "query",
+            "required": false,
+            "description": "Filter by supported task type.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "essay",
+                "lab_report",
+                "exam_revision",
+                "group_project",
+                "reading",
+                "presentation",
+                "assignment",
+                "generic"
+              ]
+            }
+          },
+          {
+            "name": "language",
+            "in": "query",
+            "required": false,
+            "description": "Filter by supported language.",
+            "schema": {
+              "type": "string",
+              "default": "en"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Page size, 1–100; default 50.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Opaque pagination offset cursor.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/IfNoneMatch"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Public template summaries with next_cursor.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Request correlation ID (also returned on errors).",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "ETag": {
+                "description": "Representation validator. Send it in If-None-Match on the next read.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "Public short-lived cache policy.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateList"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Template page has not changed.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Request correlation ID (also returned on errors).",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "ETag": {
+                "description": "Representation validator. Send it in If-None-Match on the next read.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "Cache policy for this representation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/TemplatesUnavailable"
+          }
+        }
+      }
+    },
+    "/v1/templates/{template_id}": {
+      "parameters": [
+        {
+          "name": "template_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getTemplate",
+        "summary": "Get template details and variants",
+        "tags": [
+          "Templates"
+        ],
+        "security": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfNoneMatch"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Public template detail.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Request correlation ID (also returned on errors).",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "ETag": {
+                "description": "Representation validator. Send it in If-None-Match on the next read.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "Public short-lived cache policy.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateDetail"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Template has not changed.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Request correlation ID (also returned on errors).",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              },
+              "ETag": {
+                "description": "Representation validator. Send it in If-None-Match on the next read.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "Cache policy for this representation.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/TemplatesUnavailable"
+          }
+        }
+      }
+    },
+    "/internal/jobs/purge": {
+      "get": {
+        "operationId": "runRetentionPurge",
+        "summary": "Run daily retention maintenance",
+        "description": "Internal Vercel Cron route. Mutates records eligible for retention deletion. Never call from browser clients or run manually against production.",
+        "tags": [
+          "Internal operations"
+        ],
+        "security": [
+          {
+            "cronBearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Retry and purge counts.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Request correlation ID (also returned on errors).",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetentionJobResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid cron bearer token.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Request correlation ID (also returned on errors).",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalJobError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Job secret or Supabase service configuration unavailable.",
+            "headers": {
+              "X-Request-Id": {
+                "description": "Request correlation ID (also returned on errors).",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InternalJobError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Supabase end-user access token obtained from the signed-in frontend Supabase session."
+      },
+      "cronBearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "opaque",
+        "description": "Server-only CRON_SECRET. Never provide to frontend code."
+      }
+    },
+    "parameters": {
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "description": "Unique per write action; 8–128 characters. Reuse the same value and identical body for retries.",
+        "schema": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9._:-]{8,128}$"
+        },
+        "example": "task-create-8a1f9347"
+      },
+      "IfNoneMatch": {
+        "name": "If-None-Match",
+        "in": "header",
+        "required": false,
+        "description": "Send a previously received ETag to receive 304 when the representation is unchanged.",
+        "schema": {
+          "type": "string"
+        },
+        "example": "W/\"e83ac0\""
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Malformed JSON or missing required idempotency key.",
+        "headers": {
+          "X-Request-Id": {
+            "description": "Request correlation ID (also returned on errors).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            },
+            "example": {
+              "error": {
+                "code": "invalid_json",
+                "message": "The request body must contain valid JSON.",
+                "request_id": "55555555-5555-4555-8555-555555555555"
+              }
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Missing, expired, invalid, revoked, or deleted-account token.",
+        "headers": {
+          "X-Request-Id": {
+            "description": "Request correlation ID (also returned on errors).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Resource is absent or belongs to another account.",
+        "headers": {
+          "X-Request-Id": {
+            "description": "Request correlation ID (also returned on errors).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "Version conflict, task/step cap, or idempotency conflict.",
+        "headers": {
+          "X-Request-Id": {
+            "description": "Request correlation ID (also returned on errors).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "PayloadTooLarge": {
+        "description": "Request/response exceeds configured size limit.",
+        "headers": {
+          "X-Request-Id": {
+            "description": "Request correlation ID (also returned on errors).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "UnsupportedMediaType": {
+        "description": "JSON request required.",
+        "headers": {
+          "X-Request-Id": {
+            "description": "Request correlation ID (also returned on errors).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "ValidationError": {
+        "description": "Field or query validation failed.",
+        "headers": {
+          "X-Request-Id": {
+            "description": "Request correlation ID (also returned on errors).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "Rate limit reached. Response includes Retry-After.",
+        "headers": {
+          "X-Request-Id": {
+            "description": "Request correlation ID (also returned on errors).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "Retry-After": {
+            "description": "Seconds until retry.",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "InternalError": {
+        "description": "Unexpected sanitized server error.",
+        "headers": {
+          "X-Request-Id": {
+            "description": "Request correlation ID (also returned on errors).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "ServiceUnavailable": {
+        "description": "Auth, template, database RPC, idempotency, or limit service unavailable.",
+        "headers": {
+          "X-Request-Id": {
+            "description": "Request correlation ID (also returned on errors).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      },
+      "TemplatesUnavailable": {
+        "description": "No usable active generic template or template data source is unavailable.",
+        "headers": {
+          "X-Request-Id": {
+            "description": "Request correlation ID (also returned on errors).",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "ErrorEnvelope": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ApiError"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ApiError": {
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "request_id"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "account_deleted",
+              "auth_unavailable",
+              "bad_request",
+              "idempotency_unavailable",
+              "idempotency_key_required",
+              "idempotency_key_reused",
+              "internal_error",
+              "invalid_json",
+              "invalid_transition",
+              "method_not_allowed",
+              "not_found",
+              "payload_too_large",
+              "rate_limit_unavailable",
+              "rate_limited",
+              "request_failed",
+              "request_in_progress",
+              "response_too_large",
+              "service_unavailable",
+              "templates_unavailable",
+              "task_limit_reached",
+              "step_limit_reached",
+              "token_expired",
+              "token_invalid",
+              "token_revoked",
+              "unsupported_media_type",
+              "validation_failed",
+              "version_conflict"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "details": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "InternalJobError": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "enum": [
+              "unauthorized",
+              "job_not_configured",
+              "job_unavailable"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "Health": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Readiness": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "not_ready"
+            ]
+          },
+          "dependency": {
+            "type": "string",
+            "enum": [
+              "supabase_auth"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProfileSettings": {
+        "type": "object",
+        "properties": {
+          "calm_mode": {
+            "type": "boolean"
+          },
+          "sound_enabled": {
+            "type": "boolean"
+          },
+          "streak_visible": {
+            "type": "boolean"
+          },
+          "reminders_enabled": {
+            "type": "boolean"
+          },
+          "daily_reminder_cap": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 6
+          },
+          "quiet_hours_start": {
+            "type": "string",
+            "pattern": "^(?:[01][0-9]|2[0-3]):[0-5][0-9]$"
+          },
+          "quiet_hours_end": {
+            "type": "string",
+            "pattern": "^(?:[01][0-9]|2[0-3]):[0-5][0-9]$"
+          },
+          "show_task_in_notification": {
+            "type": "boolean"
+          },
+          "detail_level_default": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          }
+        },
+        "additionalProperties": false
+      },
+      "Profile": {
+        "type": "object",
+        "required": [
+          "id",
+          "display_name",
+          "language",
+          "timezone",
+          "settings",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "display_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "language": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 12,
+            "example": "en"
+          },
+          "timezone": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "IANA timezone name.",
+            "default": "Africa/Lagos"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/ProfileSettings"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "ProfilePatch": {
+        "type": "object",
+        "properties": {
+          "display_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "language": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 12
+          },
+          "timezone": {
+            "type": "string",
+            "maxLength": 100,
+            "description": "Valid IANA timezone."
+          },
+          "settings": {
+            "$ref": "#/components/schemas/ProfileSettings"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Only supplied fields change. settings keys merge with stored settings."
+      },
+      "RewardState": {
+        "type": "object",
+        "required": [
+          "points_total",
+          "plant_stage",
+          "current_streak",
+          "best_streak",
+          "freezes_held",
+          "streak_status"
+        ],
+        "properties": {
+          "points_total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "plant_stage": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "current_streak": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "best_streak": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "freezes_held": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+          },
+          "streak_status": {
+            "type": "string",
+            "enum": [
+              "none",
+              "active",
+              "frozen",
+              "ended"
+            ]
+          },
+          "last_active_local_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Step": {
+        "type": "object",
+        "required": [
+          "id",
+          "task_id",
+          "text",
+          "planned_minutes",
+          "actual_minutes",
+          "position",
+          "status",
+          "started_at",
+          "completed_at",
+          "version",
+          "created_at",
+          "updated_at",
+          "deleted_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "task_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 280
+          },
+          "planned_minutes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 240
+          },
+          "actual_minutes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 600
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 29
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "active",
+              "completed"
+            ]
+          },
+          "started_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "completed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "deleted_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Task": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "notes",
+          "source",
+          "template_id",
+          "status",
+          "due_at",
+          "version",
+          "created_at",
+          "updated_at",
+          "deleted_at",
+          "steps"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "template",
+              "ai"
+            ]
+          },
+          "template_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "completed",
+              "archived"
+            ]
+          },
+          "due_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "completed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "deleted_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Step"
+            },
+            "maxItems": 30
+          }
+        },
+        "additionalProperties": false
+      },
+      "TaskCreateRequest": {
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 500,
+            "default": ""
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "template",
+              "ai"
+            ],
+            "default": "manual"
+          },
+          "template_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "due_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "steps": {
+            "type": "array",
+            "maxItems": 30,
+            "items": {
+              "$ref": "#/components/schemas/StepCreateRequest"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "example": {
+          "title": "Prepare a project demo",
+          "source": "manual",
+          "steps": [
+            {
+              "text": "Review the project brief",
+              "planned_minutes": 15
+            }
+          ]
+        }
+      },
+      "TaskPatchRequest": {
+        "type": "object",
+        "required": [
+          "version"
+        ],
+        "properties": {
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "template",
+              "ai"
+            ]
+          },
+          "template_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "due_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Supply version and at least one field to update."
+      },
+      "VersionRequest": {
+        "type": "object",
+        "required": [
+          "version"
+        ],
+        "properties": {
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "StepCreateRequest": {
+        "type": "object",
+        "required": [
+          "text",
+          "planned_minutes"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 280
+          },
+          "planned_minutes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 240
+          }
+        },
+        "additionalProperties": false
+      },
+      "StepPatchRequest": {
+        "type": "object",
+        "required": [
+          "version"
+        ],
+        "properties": {
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 280
+          },
+          "planned_minutes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 240
+          }
+        },
+        "additionalProperties": false,
+        "description": "Supply version and text and/or planned_minutes."
+      },
+      "ReorderStepsRequest": {
+        "type": "object",
+        "required": [
+          "version",
+          "step_ids"
+        ],
+        "properties": {
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "step_ids": {
+            "type": "array",
+            "maxItems": 30,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "StepActionRequest": {
+        "type": "object",
+        "required": [
+          "version"
+        ],
+        "properties": {
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "CompleteStepRequest": {
+        "type": "object",
+        "required": [
+          "version"
+        ],
+        "properties": {
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "actual_minutes": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 600
+          }
+        },
+        "additionalProperties": false
+      },
+      "StepMutationResponse": {
+        "type": "object",
+        "required": [
+          "step",
+          "task_version"
+        ],
+        "properties": {
+          "step": {
+            "$ref": "#/components/schemas/Step"
+          },
+          "task_version": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeletedResource": {
+        "type": "object",
+        "required": [
+          "deleted",
+          "id",
+          "version",
+          "deleted_at"
+        ],
+        "properties": {
+          "deleted": {
+            "type": "boolean",
+            "const": true
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "deleted_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "RewardDelta": {
+        "type": "object",
+        "required": [
+          "points_awarded",
+          "points_total",
+          "plant_stage",
+          "previous_plant_stage",
+          "plant_stage_changed",
+          "current_streak",
+          "best_streak",
+          "freezes_held",
+          "streak_status",
+          "last_active_local_date"
+        ],
+        "properties": {
+          "points_awarded": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "points_total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "plant_stage": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "previous_plant_stage": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "plant_stage_changed": {
+            "type": "boolean"
+          },
+          "current_streak": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "best_streak": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "freezes_held": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+          },
+          "streak_status": {
+            "type": "string",
+            "enum": [
+              "none",
+              "active",
+              "frozen",
+              "ended"
+            ]
+          },
+          "last_active_local_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TaskSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "version",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "completed",
+              "archived"
+            ]
+          },
+          "completed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "version": {
+            "type": "integer"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": true
+      },
+      "StepActionResponse": {
+        "type": "object",
+        "required": [
+          "step",
+          "task",
+          "reward_delta",
+          "reward_state"
+        ],
+        "properties": {
+          "step": {
+            "$ref": "#/components/schemas/Step"
+          },
+          "task": {
+            "$ref": "#/components/schemas/TaskSummary"
+          },
+          "reward_delta": {
+            "$ref": "#/components/schemas/RewardDelta"
+          },
+          "reward_state": {
+            "$ref": "#/components/schemas/RewardState"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TaskListResponse": {
+        "type": "object",
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Task"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "TaskDeltaResponse": {
+        "type": "object",
+        "required": [
+          "items",
+          "next_cursor",
+          "next_since",
+          "snapshot_at",
+          "server_time",
+          "full_refresh_required"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Task"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "matches_filter": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              ]
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "next_since": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "snapshot_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "server_time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "full_refresh_required": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TaskListOrDelta": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/TaskListResponse"
+          },
+          {
+            "$ref": "#/components/schemas/TaskDeltaResponse"
+          }
+        ]
+      },
+      "Bootstrap": {
+        "type": "object",
+        "required": [
+          "profile",
+          "reward_state",
+          "tasks",
+          "active_task_count",
+          "template_manifest",
+          "server_time",
+          "api_version"
+        ],
+        "properties": {
+          "profile": {
+            "$ref": "#/components/schemas/Profile"
+          },
+          "reward_state": {
+            "$ref": "#/components/schemas/RewardState"
+          },
+          "tasks": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "$ref": "#/components/schemas/Task"
+            }
+          },
+          "active_task_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "template_manifest": {
+            "$ref": "#/components/schemas/TemplateManifest"
+          },
+          "server_time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "api_version": {
+            "type": "string",
+            "const": "v1"
+          }
+        },
+        "additionalProperties": false
+      },
+      "TemplateManifest": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TemplateManifestItem"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "TemplateManifestItem": {
+        "type": "object",
+        "required": [
+          "id",
+          "slug",
+          "language",
+          "task_type",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          },
+          "task_type": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "TemplateSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "slug",
+          "task_type",
+          "language",
+          "title",
+          "version"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "task_type": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "TemplateList": {
+        "type": "object",
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TemplateSummary"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "SuggestedStep": {
+        "type": "object",
+        "required": [
+          "text",
+          "planned_minutes"
+        ],
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 280
+          },
+          "planned_minutes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 120
+          }
+        },
+        "additionalProperties": false
+      },
+      "TemplateVariant": {
+        "type": "object",
+        "required": [
+          "steps"
+        ],
+        "properties": {
+          "steps": {
+            "type": "array",
+            "maxItems": 30,
+            "items": {
+              "$ref": "#/components/schemas/SuggestedStep"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "TemplateDetail": {
+        "type": "object",
+        "required": [
+          "id",
+          "slug",
+          "task_type",
+          "language",
+          "title",
+          "description",
+          "keywords",
+          "variants",
+          "version",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "task_type": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "keywords": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "variants": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/TemplateVariant"
+            }
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "updated_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": false
+      },
+      "BreakdownRequest": {
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 200
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 500,
+            "default": ""
+          },
+          "due_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "detail_level": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5,
+            "default": 3
+          },
+          "language": {
+            "type": "string",
+            "default": "en"
+          },
+          "task_type": {
+            "type": "string",
+            "enum": [
+              "essay",
+              "lab_report",
+              "exam_revision",
+              "group_project",
+              "reading",
+              "presentation",
+              "assignment",
+              "generic"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "BreakdownResponse": {
+        "type": "object",
+        "required": [
+          "steps",
+          "source",
+          "template_id",
+          "notice",
+          "prompt_version",
+          "usage"
+        ],
+        "properties": {
+          "steps": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 18,
+            "items": {
+              "$ref": "#/components/schemas/SuggestedStep"
+            }
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "template",
+              "ai"
+            ]
+          },
+          "template_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "notice": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "prompt_version": {
+            "type": "string"
+          },
+          "usage": {
+            "type": "object",
+            "required": [
+              "used",
+              "limit"
+            ],
+            "properties": {
+              "used": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "limit": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "ConsentRecord": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "consent_type": {
+            "type": "string"
+          },
+          "granted": {
+            "type": "boolean"
+          },
+          "policy_version": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "additionalProperties": true
+      },
+      "RewardEvent": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "task_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "step_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "event_type": {
+            "type": "string"
+          },
+          "points_delta": {
+            "type": "integer"
+          },
+          "streak_delta": {
+            "type": "integer"
+          },
+          "dedupe_key": {
+            "type": "string"
+          },
+          "local_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "event_data": {
+            "type": "object"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "event_order": {
+            "type": "integer"
+          }
+        },
+        "additionalProperties": true
+      },
+      "DataExport": {
+        "type": "object",
+        "required": [
+          "export_version",
+          "exported_at",
+          "account",
+          "profile",
+          "consents",
+          "tasks",
+          "steps",
+          "reward_events",
+          "reward_state",
+          "ai_breakdowns",
+          "ai_usage"
+        ],
+        "properties": {
+          "export_version": {
+            "type": "integer",
+            "const": 1
+          },
+          "exported_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "account": {
+            "type": "object",
+            "required": [
+              "id",
+              "email"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "email": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "email"
+              }
+            },
+            "additionalProperties": false
+          },
+          "profile": {
+            "$ref": "#/components/schemas/Profile"
+          },
+          "consents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConsentRecord"
+            }
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Task"
+            }
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Step"
+            }
+          },
+          "reward_events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RewardEvent"
+            }
+          },
+          "reward_state": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RewardState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ai_breakdowns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "ai_usage": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeleteAccountRequest": {
+        "type": "object",
+        "required": [
+          "confirm"
+        ],
+        "properties": {
+          "confirm": {
+            "type": "string",
+            "const": "DELETE"
+          }
+        },
+        "additionalProperties": false
+      },
+      "DeleteAccountAccepted": {
+        "type": "object",
+        "required": [
+          "status",
+          "requested_at",
+          "purge_after",
+          "auth_deletion_status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "pending"
+          },
+          "requested_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "purge_after": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "auth_deletion_status": {
+            "type": "string",
+            "enum": [
+              "soft_deleted",
+              "pending_retry"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "RetentionJobResult": {
+        "type": "object",
+        "required": [
+          "status",
+          "soft_auth_deletes_succeeded",
+          "soft_auth_deletes_pending",
+          "retention",
+          "hard_auth_deletes_succeeded",
+          "hard_auth_deletes_pending"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "completed"
+          },
+          "soft_auth_deletes_succeeded": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "soft_auth_deletes_pending": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "retention": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "hard_auth_deletes_succeeded": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "hard_auth_deletes_pending": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}
