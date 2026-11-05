@@ -1,4 +1,43 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "headers": [
+    {
+      "source": "/v1/:path*",
+      "has": [
+        {
+          "type": "header",
+          "key": "Origin",
+          "value": "http://127.0.0.1:5500"
+        }
+      ],
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "http://127.0.0.1:5500" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, PATCH, PUT, DELETE, OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "Authorization, Content-Type, Idempotency-Key, If-None-Match" },
+        { "key": "Access-Control-Expose-Headers", "value": "ETag, X-Request-Id, Retry-After, Idempotent-Replay, X-Server-Time, X-Next-Since, X-Snapshot-At" },
+        { "key": "Access-Control-Max-Age", "value": "600" },
+        { "key": "Vary", "value": "Origin" }
+      ]
+    },
+    {
+      "source": "/v1/:path*",
+      "has": [
+        {
+          "type": "header",
+          "key": "Origin",
+          "value": "http://localhost:5500"
+        }
+      ],
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "http://localhost:5500" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, PATCH, PUT, DELETE, OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "Authorization, Content-Type, Idempotency-Key, If-None-Match" },
+        { "key": "Access-Control-Expose-Headers", "value": "ETag, X-Request-Id, Retry-After, Idempotent-Replay, X-Server-Time, X-Next-Since, X-Snapshot-At" },
+        { "key": "Access-Control-Max-Age", "value": "600" },
+        { "key": "Vary", "value": "Origin" }
+      ]
+    }
+  ],
   "functions": {
     "api/index.py": {
       "maxDuration": 60
