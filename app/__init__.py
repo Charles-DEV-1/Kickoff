@@ -132,10 +132,9 @@ def create_app(settings=None):
             and response.content_length is not None
             and response.content_length >= 1024
         ):
-            response.set_data(gzip.compress(response.get_data(), mtime=0))
+            compressed_body = gzip.compress(response.get_data(), mtime=0)
+            response.set_data(compressed_body)
             response.headers["Content-Encoding"] = "gzip"
-            response.headers.pop("Content-Length", None)
-            response.headers["Content-Length"] = str(response.content_length)
             response.vary.add("Accept-Encoding")
         return response
 
